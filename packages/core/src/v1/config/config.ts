@@ -187,6 +187,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  ignore_command_prefix: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Command name prefixes to strip when matching permission rules and slash commands. e.g. 'rtk' makes 'rtk cat foo.txt' match permission rule 'cat *'",
+  }),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>

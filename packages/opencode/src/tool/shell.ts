@@ -387,6 +387,8 @@ export const ShellTool = Tool.define(
         patterns: new Set<string>(),
         always: new Set<string>(),
       }
+      const cfg = yield* config.get()
+      const prefixes = cfg.ignore_command_prefix ?? []
       const shellKind = ShellID.toKind(Shell.name(shell))
 
       for (const node of commands(root)) {
@@ -405,8 +407,16 @@ export const ShellTool = Tool.define(
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
-          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+          if (prefixes.includes(tokens[0])) {
+            const stripped = tokens.slice(1)
+            if (stripped.length) {
+              scan.patterns.add(stripped.join(" "))
+              scan.always.add(BashArity.prefix(stripped).join(" ") + " *")
+            }
+          } else {
+            scan.patterns.add(source(node))
+            scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
+          }
         }
       }
 

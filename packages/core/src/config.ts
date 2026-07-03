@@ -104,6 +104,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
+  ignore_command_prefix: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
+    description: "Command name prefixes to strip when matching permission rules and slash commands. e.g. 'rtk' makes 'rtk cat foo.txt' match permission rule 'cat *'",
+  }),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({
