@@ -7,7 +7,7 @@ import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "../installation/version"
+import { InstallationChannel, InstallationLocal } from "../installation/version"
 import { makeGlobalNode } from "../effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -46,7 +46,7 @@ export function path() {
     return join(Global.Path.data, Flag.OPENCODE_DB)
   }
   if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
+    InstallationLocal ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
   )
