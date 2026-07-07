@@ -25,16 +25,31 @@ interface State {
   approved: PermissionV1.Rule[]
 }
 
+// Specificity = count of non-wildcard characters in both permission and pattern.
+// More literal characters = more specific rule. Ties broken by declaration order
+// (last wins), preserving "later overrides earlier" semantics for equal specificity.
+function specificity(rule: PermissionV1.Rule): number {
+  let score = 0
+  for (const c of rule.permission) if (c !== "*" && c !== "?") score++
+  for (const c of rule.pattern) if (c !== "*" && c !== "?") score++
+  return score
+}
+
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
-      action: "ask",
-      permission,
-      pattern: "*",
+  const matching = rulesets
+    .flat()
+    .filter((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern))
+  if (!matching.length) return { action: "ask", permission, pattern: "*" }
+  let best = matching[0]
+  let bestScore = specificity(best)
+  for (let i = 1; i < matching.length; i++) {
+    const score = specificity(matching[i])
+    if (score >= bestScore) {
+      best = matching[i]
+      bestScore = score
     }
-  )
+  }
+  return best
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -67,7 +82,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
-      let needsAsk = false
+      const askPatterns: string[] = []
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -77,18 +92,17 @@ const layer = Layer.effect(
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
-        needsAsk = true
+        if (rule.action === "ask") askPatterns.push(pattern)
       }
 
-      if (!needsAsk) return
+      if (!askPatterns.length) return
 
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
         id,
         sessionID: request.sessionID,
         permission: request.permission,
-        patterns: request.patterns,
+        patterns: askPatterns,
         metadata: request.metadata,
         always: request.always,
         tool: request.tool,

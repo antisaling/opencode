@@ -74,6 +74,7 @@ type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
+  envVars: Set<string>
 }
 
 type Chunk = {
@@ -279,6 +280,18 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
     })
   }
 
+  if (scan.envVars.size > 0) {
+    const envVars = Array.from(scan.envVars)
+    yield* ctx.ask({
+      permission: "env",
+      patterns: envVars,
+      always: envVars,
+      metadata: {
+        command: input.command,
+      },
+    })
+  }
+
   if (scan.patterns.size === 0) return
   yield* ctx.ask({
     permission: ShellID.ToolID,
@@ -386,6 +399,7 @@ export const ShellTool = Tool.define(
         dirs: new Set<string>(),
         patterns: new Set<string>(),
         always: new Set<string>(),
+        envVars: new Set<string>(),
       }
       const cfg = yield* config.get()
       const prefixes = cfg.ignore_command_prefix ?? []
@@ -393,7 +407,14 @@ export const ShellTool = Tool.define(
 
       for (const node of commands(root)) {
         const command = parts(node)
-        const tokens = command.map((item) => item.text)
+        const cmdParts = command.filter((item) => item.type !== "variable_assignment")
+        for (const part of command) {
+          if (part.type === "variable_assignment") {
+            const name = part.text.split("=")[0]
+            if (name) scan.envVars.add(name)
+          }
+        }
+        const tokens = cmdParts.map((item) => item.text)
         const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
         if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
@@ -414,7 +435,7 @@ export const ShellTool = Tool.define(
               scan.always.add(BashArity.prefix(stripped).join(" ") + " *")
             }
           } else {
-            scan.patterns.add(source(node))
+            scan.patterns.add(tokens.join(" "))
             scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
           }
         }

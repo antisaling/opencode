@@ -128,11 +128,12 @@ test("fromConfig - does not expand tilde in middle of path", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
-// Permission precedence follows config insertion order. `evaluate()` uses the
-// last matching rule, so later config entries intentionally override earlier
-// entries even when a wildcard appears after a specific permission.
+// Permission precedence follows specificity. `evaluate()` picks the matching
+// rule with the most literal (non-wildcard) characters in permission + pattern.
+// Ties are broken by declaration order (last wins). This means a specific rule
+// like "rg *" always beats a wildcard "*" regardless of config order.
 
-test("fromConfig - preserves top-level config key order", () => {
+test("fromConfig - specificity wins over declaration order", () => {
   const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
   const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
 
@@ -140,7 +141,7 @@ test("fromConfig - preserves top-level config key order", () => {
   expect(specificFirst.map((r) => r.permission)).toEqual(["bash", "*"])
 
   expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
-  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("deny")
+  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("allow")
 })
 
 test("fromConfig - wildcard acts as fallback when it appears before specifics", () => {
@@ -295,12 +296,12 @@ test("evaluate - last matching rule wins", () => {
   expect(result.action).toBe("deny")
 })
 
-test("evaluate - last matching rule wins (wildcard after specific)", () => {
+test("evaluate - specific pattern wins over later wildcard", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
-  expect(result.action).toBe("allow")
+  expect(result.action).toBe("deny")
 })
 
 test("evaluate - glob pattern match", () => {
@@ -316,12 +317,12 @@ test("evaluate - last matching glob wins", () => {
   expect(result.action).toBe("allow")
 })
 
-test("evaluate - order matters for specificity", () => {
+test("evaluate - more specific pattern wins regardless of order", () => {
   const result = Permission.evaluate("edit", "src/components/Button.tsx", [
     { permission: "edit", pattern: "src/components/*", action: "allow" },
     { permission: "edit", pattern: "src/*", action: "deny" },
   ])
-  expect(result.action).toBe("deny")
+  expect(result.action).toBe("allow")
 })
 
 test("evaluate - unknown permission returns ask", () => {
@@ -372,12 +373,12 @@ test("evaluate - exact match at end wins over earlier wildcard", () => {
   expect(result.action).toBe("deny")
 })
 
-test("evaluate - wildcard at end overrides earlier exact match", () => {
+test("evaluate - exact match wins over later wildcard", () => {
   const result = Permission.evaluate("bash", "/bin/rm", [
     { permission: "bash", pattern: "/bin/rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
-  expect(result.action).toBe("allow")
+  expect(result.action).toBe("deny")
 })
 
 // wildcard permission tests
@@ -432,12 +433,12 @@ test("evaluate - wildcard permission fallback for unknown tool", () => {
   expect(result.action).toBe("ask")
 })
 
-test("evaluate - later wildcard permission can override earlier specific permission", () => {
+test("evaluate - specific permission wins over later wildcard permission", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "*", pattern: "*", action: "deny" },
   ])
-  expect(result.action).toBe("deny")
+  expect(result.action).toBe("allow")
 })
 
 test("evaluate - merges multiple rulesets", () => {
